@@ -1,5 +1,6 @@
 import java.util.*;
 import java.net.*;
+import java.nio.ByteBuffer;
 import java.io.*;
 
 public class UdpClient {
@@ -29,36 +30,32 @@ public class UdpClient {
 				handShakeData[2] = (byte)0xBE;
 				handShakeData[3] = (byte)0xEF;
 				byte[] handShakePacket = createPacket(handShakeData);
-				System.out.println(Arrays.toString(handShakePacket));
+				System.out.print("Handshake ");
 				sendPacket(socket, handShakePacket);
 				dataSize = 2;
 				
-				
 				InputStream in = socket.getInputStream();
-				//int portNumber = 0;
-				//portNumber += in.read();
-				//portNumber <<= 4;
-				//portNumber &= 0xFF00;
-				//portNumber |= (in.read() & 0x00FF);
+				
 				byte[] portNumber = new byte[2];
 				portNumber[0] = (byte)in.read();
 				portNumber[1] = (byte)in.read();
 				
-				port = ((portNumber[0] & 0xFF) << 8) | (portNumber[1] & 0xFF);
-				//System.out.println(portNumber);
-		
-				
-			
-				
+				port = (portNumber[0] & 0xFF) << 8 | (portNumber[1] & 0xFF);
+				System.out.println("Portnumber: " + port + '\n');
+					
 				for(int i = 0; i < 12; i++){
 					if(socket.isClosed()){
 						System.out.println("bad packet. Connection closed");
 						break;
 					}
-					byte[] data = udpHeader(port);
+					byte[] data = new byte[dataSize];
+					new Random().nextBytes(data);
+					byte[] udp = udpHeader(port, data);
 					
-					byte[] packet = udpPacket(data);
+					byte[] packet = udpPacket(udp);
+					long start = System.currentTimeMillis();
 					sendPacket(socket, packet);
+					System.out.println("RTT: " + (System.currentTimeMillis() - start) + "ms" + '\n');
 				
 					dataSize *= 2;
 
@@ -95,7 +92,7 @@ public class UdpClient {
 			return sum;
 		}
 		
-		public static long udpCheckSum(byte[] b, short l){
+		public static long udpCheckSum(byte[] b, int l){
 			long sum = 0;
 			long highVal;
 			long lowVal;
@@ -114,11 +111,9 @@ public class UdpClient {
 			udp[3] <<= 8;
 			udp[3] |= dst[3];
 			
-			udp[4] = 0;
-			udp[4] <<= 8;
-			udp[4] |= 0x11;
+			udp[4] = 17;
 			
-			udp[5] = (byte)l;
+			udp[5] = (byte)udp.length;
 			
 			for(int i=6, j=0; i< udp.length; ++i, ++j) 
 				udp[i] = b[j];
@@ -188,26 +183,21 @@ public class UdpClient {
 			return packet;
 		}
 		
-		private static byte[] udpHeader(int port){
-			byte[] packet = new byte[8 + dataSize];
-			byte[] data = new byte[dataSize];
+		private static byte[] udpHeader(int port, byte[] data){
+			byte[] packet = new byte[8 + data.length];
 			packet[0] = 0;
 			packet[1] = 0;
-			short temp = (short) port;
-			packet[2] = (byte) ((temp >>> 8) & 0xFF);
-			packet[3] = (byte) (temp & 0xFF);
-			temp = (short) packet.length;
-			packet[4] = (byte) ((temp >>> 8) & 0xFF);
-			packet[5] = (byte) (temp & 0xFF);
+			packet[2] = (byte) ((port & 0xFF00) >>> 8);
+			packet[3] = (byte) (port & 0x00FF);
+			packet[4] = (byte) ((packet.length & 0xFF00) >>> 8);
+			packet[5] = (byte) (packet.length & 0x00FF);
 			packet[6] = 0;
 			packet[7] = 0;
-			
-			new Random().nextBytes(data);
 			for(int i = 8; i < packet.length; i++){
 				packet[i] = data[i - 8];
 			}
 			
-			short check = (short)udpCheckSum(packet, temp);
+			short check = (short)udpCheckSum(packet, packet.length);
 			byte[] asArray = new byte[2];
 			asArray[0] = (byte)((check & 0xFF00) >>> 8);
 	        asArray[1] = (byte)((check & 0x00FF));
@@ -282,15 +272,7 @@ public class UdpClient {
 				for(byte e: rec){
 					magic += Integer.toHexString(Byte.toUnsignedInt(e));
 				}
-				System.out.println(magic.toUpperCase());
-				//String message = "";
-				//System.out.println( message = br.readLine());
-				//if(!message.equals("good")){
-					//socket.close();
-					
-			//	}
-				//System.out.println();
-				
+				System.out.println("Response: " + magic.toUpperCase());
 			
 		}
 		
