@@ -43,6 +43,7 @@ public class UdpClient {
 				port = (portNumber[0] & 0xFF) << 8 | (portNumber[1] & 0xFF);
 				System.out.println("Portnumber: " + port + '\n');
 					
+				float totalTime = 0;
 				for(int i = 0; i < 12; i++){
 					if(socket.isClosed()){
 						System.out.println("bad packet. Connection closed");
@@ -55,11 +56,14 @@ public class UdpClient {
 					byte[] packet = udpPacket(udp);
 					long start = System.currentTimeMillis();
 					sendPacket(socket, packet);
-					System.out.println("RTT: " + (System.currentTimeMillis() - start) + "ms" + '\n');
-				
+					long end = System.currentTimeMillis();
+					long elapsedTime = end - start;
+					System.out.println("RTT: " + (elapsedTime) + "ms" + '\n');
+					totalTime += elapsedTime;
 					dataSize *= 2;
 
 				}
+				System.out.printf("Average RTT: %,.2f%n", totalTime/12);
 			}
 		}
 		
@@ -92,34 +96,33 @@ public class UdpClient {
 			return sum;
 		}
 		
+		/*
+		 * calculates the UDP checksum for the 
+		 * UDP header and pseudo header
+		 */
 		public static long udpCheckSum(byte[] b, int l){
 			long sum = 0;
 			long highVal;
 			long lowVal;
 			long value;
-			byte[] udp = new byte[b.length + 6];
+			byte[] udp = new byte[b.length + 12];
+	
 			udp[0] = src[0];
-			udp[0] <<= 8;
-			udp[0] |= src[1];
-			udp[1] = src[2];
-			udp[1] <<= 8;
-			udp[1] |= src[3];
-			udp[2] = dst[0];
-			udp[2] <<= 8;
-			udp[2] |= dst[1];
-			udp[3] = dst[2];
-			udp[3] <<= 8;
-			udp[3] |= dst[3];
+			udp[1] = src[1];
+			udp[2] = src[2];
+			udp[3] = src[3];
+			udp[4] = dst[0];
+			udp[5] = dst[1];
+			udp[6] = dst[2];
+			udp[7] = dst[3];
+			udp[8] = 0;
+			udp[9] = 17;
+			udp[10] = (byte)((l & 0xFF00) >>> 8);
+	        udp[11] = (byte)(( l & 0x00FF));
+					
 			
-			udp[4] = 17;
-			
-			udp[5] = (byte)udp.length;
-			
-			for(int i=6, j=0; i< udp.length; ++i, ++j) 
+			for(int i=12, j=0; i< udp.length; ++i, ++j) 
 				udp[i] = b[j];
-			
-			
-			
 			
 			
 			for(int i = 0; i < udp.length; i+=2){
@@ -142,6 +145,9 @@ public class UdpClient {
 			return sum;
 		}
 		
+		/*
+		 * Creates the Ipv4 packets with UDP data to be sent
+		 */
 		private static byte[] udpPacket(byte[] data){
 			byte[] packet = new byte[20 + data.length];
 			byte finalV = (byte)(version << 4 | hlen);
@@ -183,6 +189,9 @@ public class UdpClient {
 			return packet;
 		}
 		
+		/*
+		 * creates the UDP Header
+		 */
 		private static byte[] udpHeader(int port, byte[] data){
 			byte[] packet = new byte[8 + data.length];
 			packet[0] = 0;
@@ -198,9 +207,11 @@ public class UdpClient {
 			}
 			
 			short check = (short)udpCheckSum(packet, packet.length);
-			byte[] asArray = new byte[2];
-			asArray[0] = (byte)((check & 0xFF00) >>> 8);
-	        asArray[1] = (byte)((check & 0x00FF));
+			ByteBuffer buf = ByteBuffer.allocate(2);
+			buf.putShort(check);
+			byte[] asArray = buf.array();
+			//asArray[0] = (byte)((check & 0xFF00) >>> 8);
+	        //asArray[1] = (byte)((check & 0x00FF));
 	        
 	        packet[6] = asArray[0];
 	        packet[7] = asArray[1];
